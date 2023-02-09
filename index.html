@@ -1,0 +1,232 @@
+<html>
+
+<head>
+    <title>INFO 4310 - HW1</title>
+
+    <link href="https://fonts.googleapis.com/css?family=Lato:400,700|Raleway:400,700" rel="stylesheet">
+
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+
+    <style>
+        .sfMap {
+            fill: lightgrey;
+        }
+        
+        .outline {
+            fill: none;
+            stroke: black;
+            stroke-width: 1px;
+        }
+        
+        .graticule {
+            fill: none;
+            stroke: grey;
+            stroke-width: 1px;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="container larger">
+
+
+        <h1> Visualizing Trees in San Fransisco Over Years since 1970</h3>
+
+
+            <h3> Distribution of Tree Planting in San Fransisco after 1970 </h4>
+
+                <svg id="map" height="500" width="700" style="background: #fff">
+
+                </svg>
+
+                <svg id="graph" height="600" width="1200" style="background: white">
+    
+            </svg>
+
+
+
+
+
+                <script id="notes1">
+                    // Map
+
+                    const svg = d3.select("#map");
+                    const width = svg.attr("width");
+                    const height = svg.attr("height");
+                    const margin = {
+                        top: 30,
+                        right: 30,
+                        bottom: 30,
+                        left: 30
+                    };
+                    const mapWidth = width - margin.left - margin.right;
+                    const mapHeight = height - margin.top - margin.bottom;
+                    const map = svg.append("g")
+                        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+
+                    d3.csv("./preprocessed_year_data.csv", d3.autoType).then((data) => {
+                        d3.json("./SF-Neighborhoods.geo.json").then((sf) => {
+                            // The setup of the map using topojson and d3 projection has used Jeff's INFO 3300 lecture code as a reference
+                            var sfMap = topojson.feature(sf, sf.objects.SFNeighborhoods);
+                            var sfMapMesh = topojson.mesh(sf, sf.objects.SFNeighborhoods);
+                            var projection = d3.geoAlbersUsa().fitSize([mapWidth, mapHeight], sfMap);
+
+                            var path = d3.geoPath().projection(projection);
+                            let graticule = d3.geoGraticule10();
+                            map.append("path").attr("class", "graticule").attr("d", path(graticule));
+
+                            let statePaths = map.selectAll("path.sfMap").data(sfMap)
+                                .join("path")
+                                .attr("class", "sfMap")
+                                .attr("d", path);
+
+                            map.append("path").datum(sfMapMesh)
+                                .attr("class", "outline")
+                                .attr("d", path);
+                            let all_decades = ['2020 - 2029', '2010 - 2019', '2000 - 2009', '1990 - 1999', '1980 - 1989', '1970 - 1979'];
+                            const colorScale = d3.scaleOrdinal()
+                                .domain(all_decades)
+                                .range(d3.schemeCategory10);
+                            let points = map.selectAll("circle").data(data)
+                                .join('circle')
+                                .attr("r", 2)
+                                .attr("cy", d => projection([d['Longitude'], d['Latitude']])[1])
+                                .attr("cx", d => projection([d['Longitude'], d['Latitude']])[0])
+
+                            .attr("fill", d => colorScale(d['decade']));
+
+                            let size = 10;
+                            svg.append("text")
+                                .attr("y", height - 270)
+                                .attr("x", width - 150)
+                                .attr("fill", "black")
+                                .text("Year of Planting");
+
+                            all_decades.forEach((d, i) => {
+                                svg.append("text")
+                                    .attr("x", width - 120)
+                                    .attr("y", height - 200 + 20 * i)
+                                    .attr("fill", "black")
+                                    .text(d);
+                                svg.append("circle")
+                                    .attr("cy", height - 205 + 20 * i)
+                                    .attr("cx", width - 130)
+
+                                .attr("r", size / 2)
+                                    .attr("fill", colorScale(d));
+
+                            });
+
+
+
+
+                        })
+                    });
+
+                    let graph = d3.select("svg#graph");
+
+                    d3.csv("decade_tree_breakdown.csv").then((data) => {
+
+                        const margins = {
+                            top: 10,
+                            right: 20,
+                            bottom: 50,
+                            left: 100
+                        };
+                        const width = graph.attr("width");
+                        const height = graph.attr("height");
+                        const graphWidth = width - margins.left - margins.right;
+                        const graphHeight = height - margins.top - margins.bottom;
+
+                        let annotations = graph.append("g").attr("id", "annotations");
+                        let graphArea = graph.append("g").attr("transform", `translate(${margins.left}, ${margins.top})`).attr("id", "points");
+                        const numScale = d3.scaleLinear().domain(d3.extent(data, d => Number(d['NumTrees']))).range([graphHeight, 0]);
+
+                        const decadeGroups = ['1970 - 1979', '1980 - 1989', '1990 - 1999', '2000 - 2009', '2010 - 2019', '2020 - 2029'];
+                        const decadeScale = d3.scalePoint().domain(decadeGroups).range([0, graphWidth]);
+
+                        const careGroups = ["Others", "Directorate of Public Works", "Private"];
+                        const careScale = d3.scaleOrdinal().domain(careGroups).range(d3.schemeCategory10);
+                        // The setup of the left and bottom axes has used Jeff's INFO 3300 lecture code as a reference
+                        let leftAxis = d3.axisLeft(numScale);
+                        annotations.append("g")
+                            .attr("transform", `translate(${margins.left},${margins.top})`)
+                            .call(leftAxis);
+
+                        let bottomAxis = d3.axisBottom(decadeScale);
+                        annotations.append('g')
+                            .attr("transform", `translate(${margins.left},${margins.top + graphHeight})`)
+                            .call(bottomAxis);
+                        graph.append("text").attr("class", "x label")
+                            .attr("y", height - 3)
+                            .attr("x", width / 2 - 90)
+                            .text("Year of Tree Planting");
+
+                        graph.append("text").attr("class", "y label")
+                            .attr("y", height / 2 - 30)
+                            .attr("x", 8)
+                            .text("Number of Trees")
+                            .attr("font-size", 13);
+
+                        graphArea.selectAll("g.circles")
+                            .data(data)
+                            .join("g")
+                            .attr("class", "circles")
+                            .append("circle")
+                            .join("circle")
+                            .attr("cx", d => decadeScale(d['decade']))
+                            .attr("cy", d => numScale(d['NumTrees']))
+                            .attr("r", 8)
+
+                        .attr("fill", d => careScale(d['PrimaryCaretaker']));
+                        let size = 8;
+                        graph.append("text")
+                            .attr("x", width - 860)
+                            .attr("y", height - 520)
+                            .attr("fill", "black")
+                            .text('CareTaker of Trees')
+                            .attr("font-size", 20);
+                        for (let i = 0; i < careGroups.length; i += 1) {
+                            let d = careGroups[i];
+                            graph.append("circle")
+                                .attr("cx", width - 850)
+                                .attr("cy", height - 500 + 30 * i)
+                                .attr("r", size)
+                                .attr("fill", careScale(d));
+                            graph.append("text")
+                                .attr("x", width - 820)
+                                .attr("y", height - 495 + 30 * i)
+                                .attr("fill", "black")
+                                .text(d)
+                                .attr("font-size", 20)
+                        }
+
+                    })
+                </script>
+
+
+
+
+
+
+
+
+
+    </div>
+
+
+
+
+
+
+
+    </div>
+</body>
+
+</html>
+
+</html>
